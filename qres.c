@@ -1,37 +1,8 @@
-/*********************************************************************/
-/* qres - Windows 95 quickres requestor.                             */
-/*        This program provides an automated interface to Microsofts */
-/*        QuickRes screen mode switch applet.                        */
-/*                                                                   */
-/* Author: Berend Engelbrecht                                        */
-/*                                                                   */
-/* Revision History:                                                 */
-/*-------------------------------------------------------------------*/
-/*YYMMDD| Author         | Reason                        | Version   */
-/*------+----------------+-------------------------------+-----------*/
-/*970102| B.Engelbrecht  | Created                       | 0.1.0.0   */
-/*970110| B.Engelbrecht  | Added /R parameter            | 0.2.0.0   */
-/*970114| B.Engelbrecht  | Split off qreslib.c           | 0.3.0.0   */
-/*970116| B.Engelbrecht  | Fix Win95 OSR2 menu bug       | 0.3.0.1   */
-/*970122| B.Engelbrecht  | Save/restore desktop icon pos | 0.4.0.0   */
-/*970315| B.Engelbrecht  | Support display freq for NT4  | 1.0.6.0   */
-/*970405| B.Engelbrecht  | Extra switches                | 1.0.7.0   */
-/*980125| B.Engelbrecht  | Win98/IE4 fix                 | 1.0.8.2   */
-/*980228| B.Engelbrecht  | Screen saver support          | 1.0.8.2   */
-/*050109| B.Engelbrecht  | Modifications for Borland C++ | 1.0.9.7   */
-/*      |                |                               |           */
-/*                                                                   */
-/* Copyright 1998-2005 Berend Engelbrecht. All rights reserved.      */
-/*********************************************************************/
-#if defined(__BORLANDC__)
-#pragma warn - 8057 // suppress unused parameter warnings in BCPP 5.0
-#endif
-
 #include <windows.h>
-#include <commctrl.h>
 #include <stdio.h>
 #include <string.h>
-#include "qreslib.h"
+#include <stdlib.h>
+#include "qres.h"
 
 static char szMsg[800];
 
@@ -40,7 +11,7 @@ static char szMsg[800];
 // program does not require a GUI. This keeps it nice and small
 // and guarantees good performance on all systems.
 //
-int PASCAL WinMain(
+int WinMain(
     HINSTANCE hInstance,     // Instance handle
     HINSTANCE hPrevInstance, // Previous instance handle
     LPSTR lpszCmdLine,       // Command line string
@@ -50,8 +21,6 @@ int PASCAL WinMain(
     QRES_PARS tCmdPars, tKeepPars; // User-specified parameters
     int iResult;
     MSG tMsg;
-    BOOL fHook,                // set to TRUE if hook is installed
-        fDesktopSaved = FALSE; // set to TRUE if qres32.dll call succeeds
 
     // Get rid of the process feedback cursor (this is a bit dirty).
     // Windows 95 and NT normally display the feedback cursor until
@@ -68,62 +37,30 @@ int PASCAL WinMain(
     iResult = GetQResPars(lpszCmdLine, &tCmdPars);
     if (iResult <= 0)
     {
-        MSGBOXPARAMS tParams;
-
         strcpy(szMsg, tCmdPars.szErr);
-        strcat(szMsg, "QRes version 1.0.9.4\n"
-                      "1998-2000 Berend Engelbrecht - einhard@wxs.nl\n"
+        strcat(szMsg, "QResNT version 0.0.0.1\n"
+                      "Copyright 1998-2000 Berend Engelbrecht - einhard@wxs.nl\n"
+                      "Modyfied by everything411 - everything411@163.com\n"
                       "syntax: qres options [program name]\n"
                       "where options is one or more of the following:\n"
-                      " X=nnn - set horizontal pixels\n"
-                      " Y=nnn - set vertical pixels\n"
-                      " C=nnn - set bits/pixel or number of colors\n"
-                      " /R    - restore mode after program finishes\n"
-                      " /D	Direct screen mode switch.\n"
-                      " f=n	Switch to n Hertz display refresh rate (Windows NT only).\n"
-                      " q=n	Delay before detecting QuickRes in multiples of 1/10 sec.\n"
-                      " a=n	Application start delay in multiples of 1/10 sec.\n");
-        MessageBox(NULL, szMsg, "QRes: QuickRes screen mode switch", MB_OK);
+                      " X=n - set horizontal pixels\n"
+                      " Y=n - set vertical pixels\n"
+                      " C=n - set bits/pixel or number of colors\n"
+                      " /R  - restore mode after program finishes\n"
+                      " /D  - Direct screen mode switch. (always used)\n"
+                      " f=n - Switch to n Hertz display refresh rate.\n");
+        MessageBox(NULL, szMsg, "QResNT: screen mode switch", MB_OK);
         return 0;
     }
 
-    if (tCmdPars.dwFlags & QF_CHECK)
-    {
-        // Just check if QuickRes is installed
-        return !CheckQuickRes(TRUE);
-    }
     tKeepPars = tCmdPars;
 
     do // while (tCmdPars.dwFlags & QF_SCRSAVER)
     {
         tCmdPars = tKeepPars;
 
-        // if app is a screen saver, wait until it is active
-        if (tCmdPars.dwFlags & QF_SCRSAVER)
-        {
-            while (!FindWindowEx(NULL, NULL, "WindowsScreenSaverClass", NULL))
-                Sleep(500);
-        }
-
         // Complete missing parameters
         CompleteQResPars(&tCmdPars);
-
-        // Activate the Explorer hook DLL
-        fHook = InstallQResFilter(TRUE);
-
-        // Save icons if we are running an app and /R is specified
-        if ((tCmdPars.dwFlags & QF_RESTORE) && tCmdPars.szApp[0])
-        {
-            if (fHook) // if hook DLL is active
-            {
-                PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_SAVE_DESKTOP, 0);
-                fDesktopSaved = TRUE;
-            }
-        }
-
-        // get rid of the desktop mouse cursor
-        if (fHook && !(tCmdPars.dwFlags & QF_NOSWITCH) && (GetWinVer() != WVER_ME))
-            PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_HIDE_MOUSE, 0);
 
         // 970405: New delay before looking for QuickRes
         if (tCmdPars.wQRDelay)
@@ -131,37 +68,17 @@ int PASCAL WinMain(
         else
             Sleep(100); // minimum delay
 
-        // Only get QuickRes app data if we use QuickRes for switching
-        tQRes.fDirect = (tCmdPars.dwFlags & QF_DIRECT);
-        if (!tQRes.fDirect && !FindQuickResApp(&tQRes))
-        {
-            CheckQuickRes(TRUE);
-
-            //   if (MessageBox(NULL, "QuickRes not installed. Resolution switch is disabled.",
-            //              "qres", MB_ICONEXCLAMATION | MB_OKCANCEL) != IDOK)
-            //   {
-            //     InstallQResFilter(FALSE);
-            //     return 0;
-            //   }
-        }
-        else if (!(tCmdPars.dwFlags & QF_NOSWITCH))
+        if (!(tCmdPars.dwFlags & QF_NOSWITCH))
         {
             if (!SwitchQResMode(&tCmdPars.mNew, &tQRes))
             {
-                if (fHook)
-                    PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_SHOW_MOUSE, 0);
                 sprintf(szMsg, "Screen mode not found: x=%ld y=%ld c=%d",
                         tCmdPars.mNew.dwXRes, tCmdPars.mNew.dwYRes,
                         tCmdPars.mNew.wBitsPixel);
                 MessageBox(NULL, szMsg, "qres", 0);
-                InstallQResFilter(FALSE);
                 return 0;
             }
         }
-
-        // Restore the mouse cursor
-        if (fHook && (GetWinVer() != WVER_ME))
-            PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_SHOW_MOUSE, 0);
 
         // Finally run the app if one was specified
         if (tCmdPars.szApp[0])
@@ -204,57 +121,236 @@ int PASCAL WinMain(
                 // Detach child process
                 CloseHandle(tProcess.hThread);
                 CloseHandle(tProcess.hProcess);
-
-                // Specific fix for MSIE4. Loader process quits while
-                // browser is still running on Windows 98
-                strupr(tCmdPars.szApp);
-                if (strstr(tCmdPars.szApp, "IEXPLORE") || strstr(tCmdPars.szApp, "RUNDLL32"))
-                {
-                    while (FindWindowEx(NULL, NULL, "IEFrame", NULL))
-                        Sleep(1000);
-                }
-
-                // specific code for screensaver
-                if (tCmdPars.dwFlags & QF_SCRSAVER)
-                {
-                    while (FindWindowEx(NULL, NULL, "WindowsScreenSaverClass", NULL))
-                        Sleep(1000);
-                }
             }
             else
             {
                 sprintf(szMsg, "Cannot run %s", tCmdPars.szApp);
-                MessageBox(NULL, szMsg, "qres", 0);
+                MessageBox(NULL, szMsg, "QResNT", 0);
             }
             // Switch back to old mode
             if (tCmdPars.dwFlags & QF_RESTORE)
             {
-                if (fHook && (GetWinVer() != WVER_ME))
-                {
-                    PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_HIDE_MOUSE, 0);
-                    Sleep(100);
-                }
                 SwitchQResMode(&tCmdPars.mOld, &tQRes);
-                if (fHook && (GetWinVer() != WVER_ME))
-                    PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_SHOW_MOUSE, 0);
+            }
+        }
+    } while (tCmdPars.dwFlags & QF_SCRSAVER);
+    return 0;
+}
 
-                // If we managed to save desktop icon positions, restore them now
-                if (fDesktopSaved)
+// GetQResPars parses the command line passed to qres.
+// Return value is the number of distinct parameters found.
+// The function returns -1 and sets ptParsRet->cErrPar if an
+// unknown parameter is encountered.
+//
+int GetQResPars(LPSTR lpszCmdLine,    // Command line string
+                QRES_PARS *ptParsRet) // Returns parameters
+{
+    int iTokens, iOfs;
+    DWORD dwValue;
+    char *szToken;
+    static char szApp[512];
+
+    memset(ptParsRet, 0, sizeof(QRES_PARS));
+    strncpy(szApp, lpszCmdLine, sizeof(szApp));
+    szApp[sizeof(szApp) - 1] = 0;
+    for (szToken = strtok(lpszCmdLine, " "), iTokens = 0;
+         szToken;
+         szToken = strtok(NULL, " "), iTokens++)
+    {
+        // /X=nnn is alternate notation for X=nnn
+        if ((strlen(szToken) > 2) && (szToken[0] == '/') &&
+            (szToken[2] == '='))
+            szToken++;
+
+        // All numeric options have format A=value, no spaces allowed
+        if ((strlen(szToken) > 1) && (szToken[1] == '='))
+        {
+            dwValue = strtoul(szToken + 2, NULL, 10);
+            switch (toupper(*szToken))
+            {
+            case 'X':
+                ptParsRet->mNew.dwXRes = dwValue;
+                break;
+            case 'Y':
+                ptParsRet->mNew.dwYRes = dwValue;
+                break;
+            case 'C':
+                // It is allowed to specify '256 colors' instead of
+                // '8 bits color'.
+                if (dwValue < 256)
+                    ptParsRet->mNew.wBitsPixel = (UINT)dwValue;
+                else if (dwValue == 256)
+                    ptParsRet->mNew.wBitsPixel = 8;
+                break;
+            case 'F': // 970315: frequency, NT only
+                ptParsRet->mNew.wFreq = (UINT)dwValue;
+                break;
+            case 'Q': // 970405: QRes delay in 1/10 sec
+                ptParsRet->wQRDelay = (UINT)dwValue;
+                break;
+            case 'A': // 970405: App delay in 1/10 sec
+                ptParsRet->wAppDelay = (UINT)dwValue;
+                break;
+            case 'S':
+                switch ((UINT)dwValue)
                 {
-                    PostMessage(QResMsgWnd(), QRES_MESSAGE, QRES_RESTORE_DESKTOP, 0);
-                    Sleep(5000);
+                case 1:
+                    ptParsRet->dwFlags |= QF_SAVEUSER;
+                    break;
+                case 2:
+                    ptParsRet->dwFlags |= QF_SAVEALL;
+                    break;
+                default:
+                    sprintf(ptParsRet->szErr, "%s - option value not allowed\n\n", szToken);
+                    return -1;
+                }
+                break;
+            default:
+                // unknown option
+                sprintf(ptParsRet->szErr, "Unknown option: '%c'\n\n",
+                        *szToken);
+                return -1;
+            }
+        }
+        else if ((strlen(szToken) > 1) && (szToken[0] == '/'))
+        {
+            // Boolean flags list starts with '/'
+            while (*(++szToken))
+            {
+                switch (toupper(*szToken))
+                {
+                case 'R':
+                    ptParsRet->dwFlags |= QF_RESTORE;
+                    break;
+                default:
+                    // unknown flag
+                    sprintf(ptParsRet->szErr, "Unknown option: '%c'\n\n",
+                            *szToken);
+                    return -1;
                 }
             }
         }
+        else
+        {
+            // It is assumed that the file name of the application to
+            // run directly follows the last option token.
+            // Long file names with embedded spaces are OK, quotes not
+            // necessary but allowed.
+            iOfs = szToken - lpszCmdLine;
+            if (iOfs > 0)
+            {
+                memmove(ptParsRet->szApp, szApp + iOfs,
+                        sizeof(szApp) - iOfs);
+                strcpy(szApp, ptParsRet->szApp);
+                strlwr(szApp);
+                szToken = strstr(szApp, ".scr");
 
-        InstallQResFilter(FALSE);
-
-    } while (tCmdPars.dwFlags & QF_SCRSAVER);
-    if (tQRes.hwnd && (tCmdPars.dwFlags & QF_HIDEQR))
-    {
-        SetRegValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-                    "Taskbar Display Controls", NULL);
-        PostMessage(tQRes.hwnd, WM_CLOSE, 0, 0);
+                // .scr must be at end of string or followed by quote or
+                // space.
+                if (szToken && (!*(szToken + 4) || strchr("\"' ", *(szToken + 4))))
+                    ptParsRet->dwFlags |= QF_SCRSAVER;
+            }
+            break; // stop parsing when file name is found
+        }
     }
-    return 0;
+
+    return iTokens;
+}
+
+// SwitchQResNT switches the mode without the help of QuickRes
+// on Windows NT 4.x
+BOOL SwitchQResNT(QRMODE *ptReqMode)
+{
+    DEVMODE tMode;
+    DWORD dwMode = 0;
+    DWORD dwFlags = 0; // 20000522
+
+    while (EnumDisplaySettings(NULL, dwMode, &tMode))
+    {
+        if (tMode.dmBitsPerPel == (DWORD)ptReqMode->wBitsPixel)
+        {
+            if ((!ptReqMode->dwXRes ||
+                 (ptReqMode->dwXRes == tMode.dmPelsWidth)) &&
+                (!ptReqMode->dwYRes ||
+                 (ptReqMode->dwYRes == tMode.dmPelsHeight)) &&
+                (!ptReqMode->wFreq ||
+                 ((DWORD)ptReqMode->wFreq == tMode.dmDisplayFrequency)))
+            {
+                // found matching mode
+                tMode.dmSize = sizeof(DEVMODE);
+                tMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_POSITION;
+                if (ptReqMode->wFreq)
+                    tMode.dmFields |= DM_DISPLAYFREQUENCY;
+
+                // 20000522 - new support for permanent mode switch on NT
+                if (ptReqMode->dwFlags & (QF_SAVEUSER | QF_SAVEALL))
+                {
+                    dwFlags |= CDS_UPDATEREGISTRY;
+                    if (ptReqMode->dwFlags & QF_SAVEALL)
+                    {
+                        dwFlags |= CDS_GLOBAL;
+                    }
+                }
+                //MessageBox(NULL, "NT2", "qres", 0);
+                dwFlags |= CDS_SET_PRIMARY;
+                return (ChangeDisplaySettings(&tMode, dwFlags) == DISP_CHANGE_SUCCESSFUL);
+            }
+        }
+        dwMode++;
+    }
+    return FALSE;
+}
+
+// CompleteQResPars fills out parameters not specified by the user
+// based on the current screen mode. It also initialises ptParsRet->mOld
+// and sets the QF_NOSWITCH flag if no mode switch is required.
+void CompleteQResPars(QRES_PARS *ptParsRet)
+{
+    GetCurQResMode(&ptParsRet->mOld);
+    if (!ptParsRet->mNew.dwXRes && !ptParsRet->mNew.dwYRes)
+    {
+        ptParsRet->mNew.dwXRes = ptParsRet->mOld.dwXRes;
+        ptParsRet->mNew.dwYRes = ptParsRet->mOld.dwYRes;
+    }
+    else if (ptParsRet->mNew.dwXRes == ptParsRet->mOld.dwXRes)
+    {
+        if (!ptParsRet->mNew.dwYRes)
+            ptParsRet->mNew.dwYRes = ptParsRet->mOld.dwYRes;
+    }
+    else if (ptParsRet->mNew.dwYRes == ptParsRet->mOld.dwYRes)
+    {
+        if (!ptParsRet->mNew.dwXRes)
+            ptParsRet->mNew.dwXRes = ptParsRet->mOld.dwXRes;
+    }
+    if (!ptParsRet->mNew.wBitsPixel)
+        ptParsRet->mNew.wBitsPixel = ptParsRet->mOld.wBitsPixel;
+
+    // Compare the requested mode with the current one and raise
+    // QF_NOSWITCH if they are identical
+    if (!memcmp(&ptParsRet->mNew, &ptParsRet->mOld, sizeof(QRMODE)))
+        ptParsRet->dwFlags |= QF_NOSWITCH;
+    ptParsRet->mNew.dwFlags = ptParsRet->dwFlags; // New 20000522
+    ptParsRet->mOld.dwFlags = ptParsRet->dwFlags; // New 20030907
+}
+
+// GetCurQResMode returns the current QuickRes settings for the
+// screen in *ptMode.
+//
+void GetCurQResMode(QRMODE *ptMode)
+{
+    HWND hwndScreen = GetDesktopWindow();
+    HDC hdcScreen = GetDC(hwndScreen);
+
+    ptMode->dwXRes = (DWORD)GetDeviceCaps(hdcScreen, DESKTOPHORZRES);
+    ptMode->dwYRes = (DWORD)GetDeviceCaps(hdcScreen, DESKTOPVERTRES);
+    ptMode->wBitsPixel = (UINT)GetDeviceCaps(hdcScreen, BITSPIXEL);
+    ptMode->wFreq = (UINT)GetDeviceCaps(hdcScreen, VREFRESH);
+
+    ReleaseDC(hwndScreen, hdcScreen);
+}
+
+// SwitchQResMode calls SwitchQResNT to switch to the requested mode
+BOOL SwitchQResMode(QRMODE *ptReqMode, QUICKRES *ptQRes)
+{
+    return SwitchQResNT(ptReqMode);
 }
