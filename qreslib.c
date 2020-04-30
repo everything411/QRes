@@ -116,8 +116,8 @@ void GetCurQResMode(QRMODE *ptMode)
     HWND hwndScreen = GetDesktopWindow();
     HDC hdcScreen = GetDC(hwndScreen);
 
-    ptMode->dwXRes = (DWORD)GetDeviceCaps(hdcScreen, HORZRES);
-    ptMode->dwYRes = (DWORD)GetDeviceCaps(hdcScreen, VERTRES);
+    ptMode->dwXRes = (DWORD)GetDeviceCaps(hdcScreen, DESKTOPHORZRES);
+    ptMode->dwYRes = (DWORD)GetDeviceCaps(hdcScreen, DESKTOPVERTRES);
     ptMode->wBitsPixel = (UINT)GetDeviceCaps(hdcScreen, BITSPIXEL);
     if (GetWinVer() == WVER_NT)
         ptMode->wFreq = (UINT)GetDeviceCaps(hdcScreen, VREFRESH);
