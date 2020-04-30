@@ -48,3 +48,4 @@ void GetCurQResMode(QRMODE *ptMode);
 void CompleteQResPars(QRES_PARS *ptParsRet);
 int GetQResPars(LPSTR lpszCmdLine,    // Command line string
                 QRES_PARS *ptParsRet); // Returns parameters
+OSVERSIONINFO GetWindowsVersion();

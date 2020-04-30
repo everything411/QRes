@@ -11,7 +11,7 @@ static char szMsg[800];
 // program does not require a GUI. This keeps it nice and small
 // and guarantees good performance on all systems.
 //
-int WinMain(
+int WINAPI WinMain(
     HINSTANCE hInstance,     // Instance handle
     HINSTANCE hPrevInstance, // Previous instance handle
     LPSTR lpszCmdLine,       // Command line string
@@ -354,3 +354,11 @@ BOOL SwitchQResMode(QRMODE *ptReqMode, QUICKRES *ptQRes)
 {
     return SwitchQResNT(ptReqMode);
 }
+
+// OSVERSIONINFO GetWindowsVersion()
+// {
+//     OSVERSIONINFO ovi;
+//     ovi.dwOSVersionInfoSize = sizeof(ovi);
+//     GetVersionEx(&ovi);
+//     return ovi;
+// }
